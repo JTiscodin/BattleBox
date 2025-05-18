@@ -1,0 +1,16 @@
+# Maven build directory
+/target/
+
+# IntelliJ IDEA files
+/.idea/
+/*.iml
+
+# VS Code settings
+/.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+dependency-reduced-pom.xml
+

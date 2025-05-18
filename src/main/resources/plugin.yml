@@ -1,0 +1,13 @@
+name: BattleBox
+version: '1.0'
+main: plugins.battlebox.BattleBox
+api-version: '1.20'
+commands:
+  loadarena:
+    description: Loads the battlebox arena
+  testKit:
+    description: Gives a test battlebox kit to the player
+permissions:
+  battlebox.build:
+    description: Allows the player to build in the arena
+    default: op
