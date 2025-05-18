@@ -12,7 +12,7 @@ A Minecraft plugin built with Maven.
 ### Build and Deploy
 
 1. Clone the repository:
-   git clone https://github.com/yourusername/BattleBox.git
+   git clone https://github.com/JTiscodin/BattleBox.git
    cd BattleBox
 
 2. Build the plugin:
