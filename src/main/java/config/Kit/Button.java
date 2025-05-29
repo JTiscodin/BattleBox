@@ -1,5 +1,5 @@
 package config.Kit;
 
 public class Button{
-    int x, y, z;
+    public int x, y, z;
 }

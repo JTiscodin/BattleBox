@@ -7,7 +7,25 @@ commands:
     description: Loads the battlebox arena
   testKit:
     description: Gives a test battlebox kit to the player
+  arena:
+    description: Arena management commands
+    usage: /arena <create|setregion|addkit|save|cancel|list|info|delete|wizard>
+  gametest:
+    description: Game testing commands for winner logic
+    usage: /gametest <create|join|leave|teams|winner|woolcount|list|info|delete>
+  timertest:
+    description: Timer testing commands for countdown functionality
+    usage: /timertest <start|global|game|stop|stopall|status|remaining|help>
 permissions:
   battlebox.build:
     description: Allows the player to build in the arena
+    default: op
+  battlebox.arena.admin:
+    description: Allows the player to create and manage arenas
+    default: op
+  battlebox.gametest.admin:
+    description: Allows the player to test game mechanics
+    default: op
+  battlebox.timertest.admin:
+    description: Allows the player to test timer functionality
     default: op
