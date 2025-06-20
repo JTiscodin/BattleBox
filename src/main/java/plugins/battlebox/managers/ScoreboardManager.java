@@ -80,6 +80,60 @@ public class ScoreboardManager {
         objective.getScore(ChatColor.GOLD + "play.battlebox.com").setScore(score--);
     }
 
+    /**
+     * Update scoreboard with timer information
+     */
+    public void updateScoreboardWithTimer(Player player, String timerTitle, String timeDisplay, ChatColor color) {
+        Scoreboard scoreboard = playerScoreboards.get(player);
+        if (scoreboard == null) return;
+
+        Objective objective = scoreboard.getObjective("battlebox");
+        if (objective == null) return;
+
+        // Clear existing scores
+        for (String entry : scoreboard.getEntries()) {
+            scoreboard.resetScores(entry);
+        }
+
+        // Add scoreboard content with timer
+        int score = 15;
+
+        // Timer section at top
+        objective.getScore(color + "" + ChatColor.BOLD + timerTitle).setScore(score--);
+        objective.getScore(color + "" + ChatColor.BOLD + timeDisplay).setScore(score--);
+        
+        // Empty line
+        objective.getScore(ChatColor.WHITE + "").setScore(score--);
+
+        // Player info
+        objective.getScore(ChatColor.AQUA + "Player: " + ChatColor.WHITE + player.getName()).setScore(score--);
+        
+        // Empty line
+        objective.getScore(ChatColor.GRAY + "").setScore(score--);
+
+        // Game status
+        Game currentGame = gameManager.getPlayerGame(player);
+        if (currentGame != null) {
+            objective.getScore(ChatColor.GREEN + "Game: " + ChatColor.WHITE + currentGame.getId()).setScore(score--);
+            objective.getScore(ChatColor.GREEN + "Arena: " + ChatColor.WHITE + currentGame.getArenaId()).setScore(score--);
+            objective.getScore(ChatColor.GREEN + "Status: " + ChatColor.WHITE + getGameStateDisplay(currentGame.getState())).setScore(score--);
+            
+            // Show team info
+            Game.TeamColor playerTeam = currentGame.getPlayerTeam(player);
+            if (playerTeam != null) {
+                objective.getScore(ChatColor.GREEN + "Team: " + playerTeam.chatColor + playerTeam.displayName).setScore(score--);
+            }
+        } else {
+            objective.getScore(ChatColor.RED + "Status: " + ChatColor.WHITE + "Not in game").setScore(score--);
+        }
+
+        // Empty line
+        objective.getScore(ChatColor.DARK_GRAY + "").setScore(score--);
+
+        // Footer
+        objective.getScore(ChatColor.GOLD + "play.battlebox.com").setScore(score--);
+    }
+    
     private String getGameStateDisplay(GameState state) {
         return switch (state) {
             case WAITING -> "Waiting";

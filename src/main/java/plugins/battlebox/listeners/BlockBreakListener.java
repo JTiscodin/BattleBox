@@ -1,42 +1,68 @@
 package plugins.battlebox.listeners;
 
-import config.ArenaConfig;
-import config.Box;
-import org.bukkit.Location;
+import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import plugins.battlebox.game.Game;
+import plugins.battlebox.game.GameManager;
 import plugins.battlebox.managers.ArenaManager;
+import config.ArenaConfig;
 
 public class BlockBreakListener implements Listener {
+
+    private final GameManager gameManager;
     private final ArenaManager arenaManager;
 
-    public BlockBreakListener(ArenaManager arenaManager){
+    public BlockBreakListener(GameManager gameManager, ArenaManager arenaManager) {
+        this.gameManager = gameManager;
         this.arenaManager = arenaManager;
     }
 
     @EventHandler
-    public void onBlockBreak(BlockBreakEvent e){
-        if(!e.getPlayer().hasPermission("battlebox.build") && !inRegion(e.getBlock().getLocation())){
-            e.setCancelled(true);
-            e.getPlayer().sendMessage("You can't break blocks in this arena");
+    public void onBlockBreak(BlockBreakEvent e) {
+        Player player = e.getPlayer();
+        
+        // Allow operators in creative mode to break blocks
+        if (player.isOp() && player.getGameMode() == GameMode.CREATIVE) {
+            e.setDropItems(false); // Don't drop items when breaking in creative
+            return;
         }
-        //we don't want to drop items when breaking, since we are having infinite blocks of wool.
+        
+        // Check if player is in a game
+        Game game = gameManager.getPlayerGame(player);
+        if (game == null) {
+            e.setCancelled(true);
+            player.sendMessage(ChatColor.RED + "You can only break blocks while in a BattleBox game!");
+            return;
+        }
+        
+        // Get arena config
+        ArenaConfig arena = arenaManager.getArena(game.getArenaId());
+        if (arena == null) {
+            e.setCancelled(true);
+            player.sendMessage(ChatColor.RED + "Arena configuration not found!");
+            return;
+        }
+        
+        // Check if game is in progress
+        if (game.getState() != plugins.battlebox.game.GameState.IN_PROGRESS) {
+            e.setCancelled(true);
+            player.sendMessage(ChatColor.YELLOW + "You can only break blocks when the game is active!");
+            return;
+        }
+        
+        // Check if block breaking is in valid area (center 3x3)
+        if (!game.isValidPlacementLocation(e.getBlock().getLocation(), arena)) {
+            e.setCancelled(true);
+            player.sendMessage(ChatColor.RED + "You can only break blocks in the center area!");
+            return;
+        }
+        
+        // Allow breaking and don't drop items (to prevent item farming)
         e.setDropItems(false);
-    }
-
-    public boolean inRegion(Location loc) {
-        ArenaConfig arena = arenaManager.getArenas().get(0);
-        if (!loc.getWorld().getName().equals(arena.world)) return false;
-
-        Box box = arena.box;
-
-        int x = loc.getBlockX();
-        int y = loc.getBlockY();
-        int z = loc.getBlockZ();
-
-        return (x >= box.x1 && x <= box.x2) &&
-                (y >= box.y1 && y <= box.y2) &&
-                (z >= box.z1 && z <= box.z2);
+        player.sendMessage(ChatColor.GREEN + "Block broken!");
     }
 }

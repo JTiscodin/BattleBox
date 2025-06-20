@@ -13,15 +13,20 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Manages countdown timers displayed as titles in the middle of player screens
+ * Manages countdown timers displayed in scoreboard sidebar
  */
 public class TimerManager {
     private final JavaPlugin plugin;
     private final Map<String, TimerInstance> activeTimers;
+    private ScoreboardManager scoreboardManager;
     
     public TimerManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.activeTimers = new HashMap<>();
+    }
+    
+    public void setScoreboardManager(ScoreboardManager scoreboardManager) {
+        this.scoreboardManager = scoreboardManager;
     }
     
     /**
@@ -161,31 +166,39 @@ public class TimerManager {
         public int getRemainingSeconds() {
             return remainingSeconds;
         }
-        
-        private void showCountdown() {
-            String subtitle = formatTime(remainingSeconds);
+          private void showCountdown() {
+            String timeDisplay = formatTime(remainingSeconds);
             ChatColor color = getTimeColor(remainingSeconds);
             
-            String coloredTitle = color + mainTitle;
-            String coloredSubtitle = color + "" + ChatColor.BOLD + subtitle;
-            
+            // Update scoreboards for all players in timer
             for (Player player : players) {
-                if (player.isOnline()) {
-                    // Title stays for 1 second with smooth transitions
-                    player.sendTitle(coloredTitle, coloredSubtitle, 5, 15, 5);
+                if (player.isOnline() && scoreboardManager != null) {
+                    scoreboardManager.updateScoreboardWithTimer(player, mainTitle, timeDisplay, color);
                 }
             }
         }
         
         private void showTimerComplete() {
-            String completeTitle = ChatColor.GREEN.toString() + ChatColor.BOLD + "GO!";
-            String completeSubtitle = ChatColor.GREEN + "Game Started!";
-            
+            // Update scoreboards to show completion and then refresh to normal
             for (Player player : players) {
                 if (player.isOnline()) {
-                    player.sendTitle(completeTitle, completeSubtitle, 5, 30, 10);
+                    if (scoreboardManager != null) {
+                        scoreboardManager.updateScoreboardWithTimer(player, "GAME STARTED", "GO!", ChatColor.GREEN);
+                    }
+                    // Send a brief title as well for the "GO!" moment
+                    player.sendTitle(ChatColor.GREEN + "" + ChatColor.BOLD + "GO!", 
+                                   ChatColor.GREEN + "Game Started!", 5, 30, 10);
                 }
             }
+            
+            // After 2 seconds, refresh scoreboards to normal state
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                for (Player player : players) {
+                    if (player.isOnline() && scoreboardManager != null) {
+                        scoreboardManager.updateScoreboard(player);
+                    }
+                }
+            }, 40L); // 2 seconds
         }
         
         private String formatTime(int seconds) {

@@ -2,30 +2,36 @@ name: BattleBox
 version: '1.0'
 main: plugins.battlebox.BattleBox
 api-version: '1.20'
+softdepend: [WorldEdit]
+
 commands:
   loadarena:
-    description: Loads the battlebox arena
-  testKit:
-    description: Gives a test battlebox kit to the player
+    description: Load the default BattleBox arena schematic
+    usage: /<command>
+    permission: battlebox.admin
+    
   arena:
-    description: Arena management commands
-    usage: /arena <create|setregion|addkit|save|cancel|list|info|delete|wizard>
-  gametest:
-    description: Game testing commands for winner logic
-    usage: /gametest <create|join|leave|teams|winner|woolcount|list|info|delete>
-  timertest:
-    description: Timer testing commands for countdown functionality
-    usage: /timertest <start|global|game|stop|stopall|status|remaining|help>
+    description: Create and manage BattleBox arenas
+    usage: /<command> <create|setcenter|setspawn|setteleport|addkit|save|list|info> [args...]
+    permission: battlebox.arena
+    
+  battlebox:
+    description: Main BattleBox game commands
+    usage: /<command> <create|join|leave|list|info> [args...]
+    permission: battlebox.use
+
 permissions:
-  battlebox.build:
-    description: Allows the player to build in the arena
+  battlebox.use:
+    description: Allows player to use basic BattleBox commands
+    default: true
+    
+  battlebox.arena:
+    description: Allows player to create and manage arenas
     default: op
-  battlebox.arena.admin:
-    description: Allows the player to create and manage arenas
+    
+  battlebox.admin:
+    description: Full BattleBox administration access
     default: op
-  battlebox.gametest.admin:
-    description: Allows the player to test game mechanics
-    default: op
-  battlebox.timertest.admin:
-    description: Allows the player to test timer functionality
-    default: op
+    children:
+      - battlebox.use
+      - battlebox.arena
