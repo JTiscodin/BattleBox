@@ -1,151 +1,203 @@
 package plugins.battlebox.managers;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scoreboard.*;
+
+import fr.mrmicky.fastboard.FastBoard;
 import plugins.battlebox.game.Game;
 import plugins.battlebox.game.GameManager;
 import plugins.battlebox.game.GameState;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class ScoreboardManager {
     private final GameManager gameManager;
-    private final Map<Player, Scoreboard> playerScoreboards;
+    private final Map<Player, FastBoard> playerScoreboards;
+    private final Map<Player, TimerInfo> playerTimers;
 
     public ScoreboardManager(JavaPlugin plugin, GameManager gameManager) {
         this.gameManager = gameManager;
         this.playerScoreboards = new HashMap<>();
-    }public void createScoreboard(Player player) {
-        org.bukkit.scoreboard.ScoreboardManager manager = Bukkit.getScoreboardManager();
-        Scoreboard scoreboard = manager.getNewScoreboard();        Objective objective = scoreboard.registerNewObjective("battlebox", Criteria.DUMMY, 
-            ChatColor.GOLD + "" + ChatColor.BOLD + "BattleBox");
-        objective.setDisplaySlot(DisplaySlot.SIDEBAR);
+        this.playerTimers = new HashMap<>();
+    }
 
-        playerScoreboards.put(player, scoreboard);
-        player.setScoreboard(scoreboard);
+    // Timer information storage class
+    private static class TimerInfo {
+        public final String title;
+        public final String timeDisplay;
+        public final ChatColor color;
+
+        public TimerInfo(String title, String timeDisplay, ChatColor color) {
+            this.title = title;
+            this.timeDisplay = timeDisplay;
+            this.color = color;
+        }
+    }
+
+    public void createScoreboard(Player player) {
+        FastBoard board = new FastBoard(player);
+        board.updateTitle(ChatColor.GOLD + "" + ChatColor.BOLD + "BattleBox");
+
+        playerScoreboards.put(player, board);
         updateScoreboard(player);
     }
 
     public void updateScoreboard(Player player) {
-        Scoreboard scoreboard = playerScoreboards.get(player);
-        if (scoreboard == null) return;
+        FastBoard board = playerScoreboards.get(player);
+        if (board == null)
+            return;
 
-        Objective objective = scoreboard.getObjective("battlebox");
-        if (objective == null) return;
+        List<String> lines = new ArrayList<>();
 
-        // Clear existing scores
-        for (String entry : scoreboard.getEntries()) {
-            scoreboard.resetScores(entry);
+        // Check if player has active timer
+        TimerInfo timerInfo = playerTimers.get(player);
+        if (timerInfo != null) {
+            // Timer section at top
+            lines.add(timerInfo.color + "" + ChatColor.BOLD + timerInfo.title);
+            lines.add(timerInfo.color + "" + ChatColor.BOLD + timerInfo.timeDisplay);
+            lines.add("");
         }
 
-        // Add scoreboard content
-        int score = 15;
-
-        // Empty line
-        objective.getScore(ChatColor.WHITE + "").setScore(score--);
+        // Empty line (if no timer)
+        if (timerInfo == null) {
+            lines.add("");
+        }
 
         // Player info
-        objective.getScore(ChatColor.AQUA + "Player: " + ChatColor.WHITE + player.getName()).setScore(score--);
-        
+        lines.add(ChatColor.AQUA + "Player: " + ChatColor.WHITE + player.getName());
+
         // Empty line
-        objective.getScore(ChatColor.GRAY + "").setScore(score--);
+        lines.add("");
 
         // Game status
         Game currentGame = gameManager.getPlayerGame(player);
         if (currentGame != null) {
-            objective.getScore(ChatColor.GREEN + "Game: " + ChatColor.WHITE + currentGame.getId()).setScore(score--);
-            objective.getScore(ChatColor.GREEN + "Arena: " + ChatColor.WHITE + currentGame.getArenaId()).setScore(score--);
-            objective.getScore(ChatColor.GREEN + "Status: " + ChatColor.WHITE + getGameStateDisplay(currentGame.getState())).setScore(score--);
-            objective.getScore(ChatColor.GREEN + "Players: " + ChatColor.WHITE + currentGame.getPlayerCount() + "/8").setScore(score--);
+            lines.add(ChatColor.GREEN + "Game: " + ChatColor.WHITE + currentGame.getId());
+            lines.add(ChatColor.GREEN + "Arena: " + ChatColor.WHITE + currentGame.getArenaId());
+            lines.add(ChatColor.GREEN + "Status: " + ChatColor.WHITE + getGameStateDisplay(currentGame.getState()));
+
+            // Show team info if in timer mode, otherwise show player count
+            Game.TeamColor playerTeam = currentGame.getPlayerTeam(player);
+            if (timerInfo != null && playerTeam != null) {
+                lines.add(ChatColor.GREEN + "Team: " + playerTeam.chatColor + playerTeam.displayName);
+            } else {
+                lines.add(ChatColor.GREEN + "Players: " + ChatColor.WHITE + currentGame.getPlayerCount() + "/8");
+            }
         } else {
-            objective.getScore(ChatColor.RED + "Status: " + ChatColor.WHITE + "Not in game").setScore(score--);
-            objective.getScore(ChatColor.YELLOW + "Use /join to find a game!").setScore(score--);
+            lines.add(ChatColor.RED + "Status: " + ChatColor.WHITE + "Not in game");
+            if (timerInfo == null) {
+                lines.add(ChatColor.YELLOW + "Use /join to find a game!");
+            }
         }
 
         // Empty line
-        objective.getScore(ChatColor.DARK_GRAY + "").setScore(score--);
+        lines.add("");
 
-        // Server info
-        objective.getScore(ChatColor.YELLOW + "Online: " + ChatColor.WHITE + Bukkit.getOnlinePlayers().size()).setScore(score--);
-        objective.getScore(ChatColor.YELLOW + "Games: " + ChatColor.WHITE + gameManager.getActiveGameCount()).setScore(score--);
-        
-        // Empty line
-        objective.getScore(ChatColor.BLACK + "").setScore(score--);
+        // Server info (only show if no timer)
+        if (timerInfo == null) {
+            lines.add(ChatColor.YELLOW + "Online: " + ChatColor.WHITE + Bukkit.getOnlinePlayers().size());
+            lines.add(ChatColor.YELLOW + "Games: " + ChatColor.WHITE + gameManager.getActiveGameCount());
+            lines.add("");
+        }
 
         // Footer
-        objective.getScore(ChatColor.GOLD + "play.battlebox.com").setScore(score--);
+        lines.add(ChatColor.GOLD + "play.battlebox.com");
+
+        board.updateLines(lines);
     }
 
     /**
      * Update scoreboard with timer information
      */
     public void updateScoreboardWithTimer(Player player, String timerTitle, String timeDisplay, ChatColor color) {
-        Scoreboard scoreboard = playerScoreboards.get(player);
-        if (scoreboard == null) return;
+        FastBoard board = playerScoreboards.get(player);
+        if (board == null)
+            return;
 
-        Objective objective = scoreboard.getObjective("battlebox");
-        if (objective == null) return;
-
-        // Clear existing scores
-        for (String entry : scoreboard.getEntries()) {
-            scoreboard.resetScores(entry);
-        }
-
-        // Add scoreboard content with timer
-        int score = 15;
+        List<String> lines = new ArrayList<>();
 
         // Timer section at top
-        objective.getScore(color + "" + ChatColor.BOLD + timerTitle).setScore(score--);
-        objective.getScore(color + "" + ChatColor.BOLD + timeDisplay).setScore(score--);
-        
+        lines.add(color + "" + ChatColor.BOLD + timerTitle);
+        lines.add(color + "" + ChatColor.BOLD + timeDisplay);
+
         // Empty line
-        objective.getScore(ChatColor.WHITE + "").setScore(score--);
+        lines.add("");
 
         // Player info
-        objective.getScore(ChatColor.AQUA + "Player: " + ChatColor.WHITE + player.getName()).setScore(score--);
-        
+        lines.add(ChatColor.AQUA + "Player: " + ChatColor.WHITE + player.getName());
+
         // Empty line
-        objective.getScore(ChatColor.GRAY + "").setScore(score--);
+        lines.add("");
 
         // Game status
         Game currentGame = gameManager.getPlayerGame(player);
         if (currentGame != null) {
-            objective.getScore(ChatColor.GREEN + "Game: " + ChatColor.WHITE + currentGame.getId()).setScore(score--);
-            objective.getScore(ChatColor.GREEN + "Arena: " + ChatColor.WHITE + currentGame.getArenaId()).setScore(score--);
-            objective.getScore(ChatColor.GREEN + "Status: " + ChatColor.WHITE + getGameStateDisplay(currentGame.getState())).setScore(score--);
-            
+            lines.add(ChatColor.GREEN + "Game: " + ChatColor.WHITE + currentGame.getId());
+            lines.add(ChatColor.GREEN + "Arena: " + ChatColor.WHITE + currentGame.getArenaId());
+            lines.add(ChatColor.GREEN + "Status: " + ChatColor.WHITE + getGameStateDisplay(currentGame.getState()));
+
             // Show team info
             Game.TeamColor playerTeam = currentGame.getPlayerTeam(player);
             if (playerTeam != null) {
-                objective.getScore(ChatColor.GREEN + "Team: " + playerTeam.chatColor + playerTeam.displayName).setScore(score--);
+                lines.add(ChatColor.GREEN + "Team: " + playerTeam.chatColor + playerTeam.displayName);
             }
         } else {
-            objective.getScore(ChatColor.RED + "Status: " + ChatColor.WHITE + "Not in game").setScore(score--);
+            lines.add(ChatColor.RED + "Status: " + ChatColor.WHITE + "Not in game");
         }
 
         // Empty line
-        objective.getScore(ChatColor.DARK_GRAY + "").setScore(score--);
+        lines.add("");
 
         // Footer
-        objective.getScore(ChatColor.GOLD + "play.battlebox.com").setScore(score--);
+        lines.add(ChatColor.GOLD + "play.battlebox.com");
+
+        board.updateLines(lines);
     }
-    
+
     private String getGameStateDisplay(GameState state) {
         return switch (state) {
             case WAITING -> "Waiting";
-            case STARTING -> "Starting";
+            case KIT_SELECTION -> "Kit Selection";
             case IN_PROGRESS -> "In Progress";
             case ENDING -> "Ending";
         };
     }
 
     public void removeScoreboard(Player player) {
-        playerScoreboards.remove(player);
-        player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+        FastBoard board = playerScoreboards.remove(player);
+        if (board != null) {
+            board.delete();
+        }
+        // Also clean up timer info
+        playerTimers.remove(player);
+    }
+
+    /**
+     * Set timer information for a player
+     */
+    public void setTimerInfo(Player player, String timerTitle, String timeDisplay, ChatColor color) {
+        playerTimers.put(player, new TimerInfo(timerTitle, timeDisplay, color));
+    }
+
+    /**
+     * Clear timer information for a player
+     */
+    public void clearTimerInfo(Player player) {
+        playerTimers.remove(player);
+    }
+
+    /**
+     * Clear timer information for multiple players
+     */
+    public void clearTimerInfo(Iterable<Player> players) {
+        for (Player player : players) {
+            playerTimers.remove(player);
+        }
     }
 
     public void updateAllScoreboards() {

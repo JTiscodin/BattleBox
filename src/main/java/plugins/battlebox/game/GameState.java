@@ -2,7 +2,7 @@ package plugins.battlebox.game;
 
 public enum GameState {
     WAITING,
-    STARTING,
+    KIT_SELECTION,
     IN_PROGRESS,
     ENDING
 }

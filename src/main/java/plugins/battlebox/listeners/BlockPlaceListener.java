@@ -11,16 +11,19 @@ import org.bukkit.inventory.ItemStack;
 import plugins.battlebox.game.Game;
 import plugins.battlebox.game.GameManager;
 import plugins.battlebox.managers.ArenaManager;
+import plugins.battlebox.managers.TimerManager;
 import config.ArenaConfig;
 
 public class BlockPlaceListener implements Listener {
 
     private final GameManager gameManager;
     private final ArenaManager arenaManager;
+    private final TimerManager timerManager;
 
-    public BlockPlaceListener(GameManager gameManager, ArenaManager arenaManager) {
+    public BlockPlaceListener(GameManager gameManager, ArenaManager arenaManager, TimerManager timerManager) {
         this.gameManager = gameManager;
         this.arenaManager = arenaManager;
+        this.timerManager = timerManager;
     }
 
     @EventHandler
@@ -126,6 +129,7 @@ public class BlockPlaceListener implements Listener {
             }
               // End the game
             game.setState(plugins.battlebox.game.GameState.ENDING);
+            timerManager.stopTimer(game.getTimerId());
             gameManager.removeGame(game.getId());
         }
     }
