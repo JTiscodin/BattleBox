@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import fr.mrmicky.fastboard.FastBoard;
+import plugins.battlebox.core.VirtualPlayerUtil;
 import plugins.battlebox.game.Game;
 import plugins.battlebox.game.GameManager;
 import plugins.battlebox.game.GameState;
@@ -40,6 +41,11 @@ public class ScoreboardManager {
     }
 
     public void createScoreboard(Player player) {
+        // Don't create scoreboards for virtual players
+        if (VirtualPlayerUtil.isVirtualPlayer(player)) {
+            return;
+        }
+
         FastBoard board = new FastBoard(player);
         board.updateTitle(ChatColor.GOLD + "" + ChatColor.BOLD + "BattleBox");
 
@@ -48,6 +54,11 @@ public class ScoreboardManager {
     }
 
     public void updateScoreboard(Player player) {
+        // Skip virtual players
+        if (VirtualPlayerUtil.isVirtualPlayer(player)) {
+            return;
+        }
+
         FastBoard board = playerScoreboards.get(player);
         if (board == null)
             return;
@@ -115,6 +126,11 @@ public class ScoreboardManager {
      * Update scoreboard with timer information
      */
     public void updateScoreboardWithTimer(Player player, String timerTitle, String timeDisplay, ChatColor color) {
+        // Skip virtual players
+        if (VirtualPlayerUtil.isVirtualPlayer(player)) {
+            return;
+        }
+
         FastBoard board = playerScoreboards.get(player);
         if (board == null)
             return;
@@ -169,6 +185,11 @@ public class ScoreboardManager {
     }
 
     public void removeScoreboard(Player player) {
+        // Skip virtual players
+        if (VirtualPlayerUtil.isVirtualPlayer(player)) {
+            return;
+        }
+
         FastBoard board = playerScoreboards.remove(player);
         if (board != null) {
             board.delete();
@@ -181,6 +202,11 @@ public class ScoreboardManager {
      * Set timer information for a player
      */
     public void setTimerInfo(Player player, String timerTitle, String timeDisplay, ChatColor color) {
+        // Skip virtual players
+        if (VirtualPlayerUtil.isVirtualPlayer(player)) {
+            return;
+        }
+
         playerTimers.put(player, new TimerInfo(timerTitle, timeDisplay, color));
     }
 
@@ -202,7 +228,7 @@ public class ScoreboardManager {
 
     public void updateAllScoreboards() {
         for (Player player : playerScoreboards.keySet()) {
-            if (player.isOnline()) {
+            if (VirtualPlayerUtil.isSafelyOnline(player)) {
                 updateScoreboard(player);
             }
         }

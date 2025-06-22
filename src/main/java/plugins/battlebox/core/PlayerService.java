@@ -31,7 +31,7 @@ public class PlayerService {
      */
     public void setupPlayerForGame(Player player, Game game) {
         Game.TeamColor team = game.getPlayerTeam(player);
-        player.sendMessage(team.chatColor + "You are on " + team.displayName + " team!");
+        VirtualPlayerUtil.safeSendMessage(player, team.chatColor + "You are on " + team.displayName + " team!");
     }
 
     /**
@@ -40,6 +40,11 @@ public class PlayerService {
      * waiting state.
      */
     public void teleportToMap(Player player, Game game, ArenaConfig arena) {
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+            plugin.getLogger().info("Skipping teleport for virtual player: " + player.getName());
+            return;
+        }
+
         Game.TeamColor team = game.getPlayerTeam(player);
         ArenaConfig.Location mapLocation = team == Game.TeamColor.RED ? arena.teamSpawns.redSpawn
                 : arena.teamSpawns.blueSpawn;
@@ -52,6 +57,11 @@ public class PlayerService {
      * Teleport player to spawn position
      */
     public void teleportToSpawn(Player player, Game game, ArenaConfig arena) {
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+            plugin.getLogger().info("Skipping spawn teleport for virtual player: " + player.getName());
+            return;
+        }
+
         Game.TeamColor team = game.getPlayerTeam(player);
         ArenaConfig.Location spawn = team == Game.TeamColor.RED ? arena.teamSpawns.redSpawn
                 : arena.teamSpawns.blueSpawn;
@@ -64,6 +74,11 @@ public class PlayerService {
      * Teleport player to game battle position
      */
     public void teleportToGamePosition(Player player, Game game, ArenaConfig arena) {
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+            plugin.getLogger().info("Skipping battle teleport for virtual player: " + player.getName());
+            return;
+        }
+
         Game.TeamColor team = game.getPlayerTeam(player);
         ArenaConfig.Location teleport = team == Game.TeamColor.RED ? arena.teamSpawns.redTeleport
                 : arena.teamSpawns.blueTeleport;
@@ -79,6 +94,11 @@ public class PlayerService {
      * Teleport player to center area during waiting state
      */
     public void teleportToWaitingArea(Player player, ArenaConfig arena) {
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+            plugin.getLogger().info("Skipping waiting area teleport for virtual player: " + player.getName());
+            return;
+        }
+
         // Calculate center of the center box for waiting area
         double centerX = (arena.centerBox.x1 + arena.centerBox.x2) / 2.0;
         double centerZ = (arena.centerBox.z1 + arena.centerBox.z2) / 2.0;
@@ -89,11 +109,10 @@ public class PlayerService {
             plugin.getLogger().warning("World " + arena.world + " not found for waiting area teleport");
             return;
         }
-
         Location waitingLocation = new Location(world, centerX, waitingY, centerZ, 0, 0);
         safeTeleport(player, waitingLocation);
 
-        player.sendMessage(ChatColor.GRAY + "Waiting for more players to join...");
+        VirtualPlayerUtil.safeSendMessage(player, ChatColor.GRAY + "Waiting for more players to join...");
     }
 
     /**
@@ -110,12 +129,10 @@ public class PlayerService {
 
         // Team wool (unlimited - will auto-refill)
         Material woolType = team == Game.TeamColor.RED ? Material.RED_WOOL : Material.BLUE_WOOL;
-        addItem(player, new ItemStack(woolType, 64));
-
-        // Team boots
+        addItem(player, new ItemStack(woolType, 64)); // Team boots
         player.getInventory().setBoots(createTeamBoots(team));
 
-        player.sendMessage(team.chatColor + "Base kit equipped!");
+        VirtualPlayerUtil.safeSendMessage(player, team.chatColor + "Base kit equipped!");
     }
 
     /**
@@ -129,11 +146,9 @@ public class PlayerService {
             if (item != null && item.getType() == woolType) {
                 return; // Already has wool
             }
-        }
-
-        // Give new wool stack
+        } // Give new wool stack
         addItem(player, new ItemStack(woolType, 64));
-        player.sendMessage(team.chatColor + "Wool refilled!");
+        VirtualPlayerUtil.safeSendMessage(player, team.chatColor + "Wool refilled!");
     }
 
     private Location createBukkitLocation(String worldName, ArenaConfig.Location loc) {

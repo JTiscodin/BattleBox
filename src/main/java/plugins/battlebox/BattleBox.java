@@ -30,6 +30,7 @@ import plugins.battlebox.core.GameService;
 import plugins.battlebox.core.KitService;
 import plugins.battlebox.core.MusicService;
 import plugins.battlebox.core.PlayerService;
+import plugins.battlebox.core.VirtualPlayerUtil;
 import plugins.battlebox.game.GameManager;
 import plugins.battlebox.listeners.ArenaCreationListener;
 import plugins.battlebox.listeners.BlockBreakListener;
@@ -59,6 +60,9 @@ public final class BattleBox extends JavaPlugin {
     @Override
     public void onEnable() {
         getLogger().info("BattleBox plugin starting...");
+
+        // Initialize virtual player utility
+        VirtualPlayerUtil.initialize(this);
 
         // Initialize managers
         ArenaManager arenaManager = new ArenaManager(this);

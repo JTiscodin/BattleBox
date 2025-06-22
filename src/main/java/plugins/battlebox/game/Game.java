@@ -12,6 +12,7 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import config.ArenaConfig;
+import plugins.battlebox.core.VirtualPlayerUtil;
 
 public class Game {
     private final String id;
@@ -56,17 +57,17 @@ public class Game {
 
     public boolean addPlayer(Player player) {
         if (players.contains(player.getUniqueId())) {
-            player.sendMessage("You are already in the game!");
+            VirtualPlayerUtil.safeSendMessage(player, "You are already in the game!");
             return false;
         }
         if (players.size() >= MAX_PLAYERS) {
-            player.sendMessage("The game is full!");
+            VirtualPlayerUtil.safeSendMessage(player, "The game is full!");
             return false;
         }
 
         // Only allow players to join during WAITING and KIT_SELECTION states
         if (state != GameState.WAITING && state != GameState.KIT_SELECTION) {
-            player.sendMessage("Cannot join game - game is in progress or ending!");
+            VirtualPlayerUtil.safeSendMessage(player, "Cannot join game - game is in progress or ending!");
             return false;
         }
 
@@ -76,7 +77,7 @@ public class Game {
         assignPlayerToTeam(player);
 
         // Handle teleportation here.
-        player.sendMessage("§aYou joined the game: §e" + id);
+        VirtualPlayerUtil.safeSendMessage(player, "§aYou joined the game: §e" + id);
         Bukkit.getLogger().info(player.getName() + " joined game " + id);
         return true;
     }
@@ -92,7 +93,7 @@ public class Game {
         // Handle the game logic here
         for (UUID playerId : players) {
             Player player = Bukkit.getPlayer(playerId);
-            if (player != null) {
+            if (player != null && VirtualPlayerUtil.canPerformNetworkOperations(player)) {
                 // TODO: tp the player to the arena spawn point (get it from the config)
             }
         }
@@ -110,11 +111,25 @@ public class Game {
         Set<Player> onlinePlayers = new HashSet<>();
         for (UUID playerId : players) {
             Player player = Bukkit.getPlayer(playerId);
-            if (player != null && player.isOnline()) {
+            if (player != null && VirtualPlayerUtil.isSafelyOnline(player)) {
                 onlinePlayers.add(player);
             }
         }
         return onlinePlayers;
+    }
+
+    /**
+     * Get only real (non-virtual) players for network operations
+     */
+    public Set<Player> getRealPlayers() {
+        Set<Player> realPlayers = new HashSet<>();
+        for (UUID playerId : players) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                realPlayers.add(player);
+            }
+        }
+        return realPlayers;
     }
 
     public int getPlayerCount() {

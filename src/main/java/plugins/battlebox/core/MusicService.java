@@ -170,9 +170,11 @@ public class MusicService {
             return;
         }
 
-        Set<Player> players = game.getPlayers();
+        Set<Player> players = game.getRealPlayers(); // Use real players only
         for (Player player : players) {
-            playSoundEffect(player, soundEvent);
+            if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                playSoundEffect(player, soundEvent);
+            }
         }
     }
 
@@ -180,14 +182,24 @@ public class MusicService {
      * Play a sound effect for a specific player
      */
     public void playSoundEffect(Player player, MusicEvent soundEvent) {
+        // Skip virtual players for sound operations
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+            return;
+        }
+
         MusicPreference pref = getPlayerPreference(player);
 
         if (!pref.isSoundEffectsEnabled()) {
             return;
         }
 
-        player.playSound(player.getLocation(), soundEvent.sound,
-                SoundCategory.MASTER, pref.getSoundVolume(), DEFAULT_PITCH);
+        try {
+            player.playSound(player.getLocation(), soundEvent.sound,
+                    SoundCategory.MASTER, pref.getSoundVolume(), DEFAULT_PITCH);
+        } catch (Exception e) {
+            plugin.getLogger()
+                    .warning("Failed to play sound effect for player " + player.getName() + ": " + e.getMessage());
+        }
     }
 
     /**
@@ -283,8 +295,8 @@ public class MusicService {
         pref.setSoundEffectsEnabled(!pref.isSoundEffectsEnabled());
         return pref.isSoundEffectsEnabled();
     } // =================================================================
-    // PRIVATE HELPER METHODS
-    // =================================================================
+      // PRIVATE HELPER METHODS
+      // =================================================================
 
     private MusicEvent getMusicEventForGameState(GameState state) {
         return switch (state) {
@@ -309,18 +321,20 @@ public class MusicService {
             currentTask.cancel();
         }
 
-        musicState.currentMusic = musicEvent;
-
-        // Start new music for all players in the game
-        Set<Player> players = game.getPlayers();
+        musicState.currentMusic = musicEvent; // Start new music for all players in the game
+        Set<Player> players = game.getRealPlayers(); // Use real players only for network operations
         for (Player player : players) {
-            playMusicForPlayer(player, musicEvent);
+            if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                playMusicForPlayer(player, musicEvent);
+            }
         } // If it's looped music, set up the repeating task
         if (musicEvent.isLooped()) {
             BukkitTask musicTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-                Set<Player> currentPlayers = game.getPlayers();
+                Set<Player> currentPlayers = game.getRealPlayers(); // Use real players only
                 for (Player player : currentPlayers) {
-                    playMusicForPlayer(player, musicEvent);
+                    if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                        playMusicForPlayer(player, musicEvent);
+                    }
                 }
             }, 0L, musicEvent.durationTicks);
 
@@ -329,14 +343,23 @@ public class MusicService {
     }
 
     private void playMusicForPlayer(Player player, MusicEvent musicEvent) {
+        // Skip virtual players for sound operations
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+            return;
+        }
+
         MusicPreference pref = getPlayerPreference(player);
 
         if (!pref.isMusicEnabled()) {
             return;
         }
 
-        player.playSound(player.getLocation(), musicEvent.sound,
-                SoundCategory.MUSIC, pref.getMusicVolume(), DEFAULT_PITCH);
+        try {
+            player.playSound(player.getLocation(), musicEvent.sound,
+                    SoundCategory.MUSIC, pref.getMusicVolume(), DEFAULT_PITCH);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to play sound for player " + player.getName() + ": " + e.getMessage());
+        }
     }
 
     private void stopMusicForPlayer(Player player) {
