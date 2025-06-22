@@ -37,12 +37,12 @@ public class GameService {
     public boolean createGame(Player creator, String arenaId) {
         ArenaConfig arena = arenaManager.getArena(arenaId);
         if (arena == null) {
-            creator.sendMessage(ChatColor.RED + "Arena '" + arenaId + "' not found!");
+            VirtualPlayerUtil.safeSendMessage(creator, ChatColor.RED + "Arena '" + arenaId + "' not found!");
             return false;
         }
 
         if (!isArenaComplete(arena)) {
-            creator.sendMessage(
+            VirtualPlayerUtil.safeSendMessage(creator,
                     ChatColor.RED + "Arena is incomplete. Use /arena info " + arenaId + " to see what's missing.");
             return false;
         }
@@ -59,8 +59,7 @@ public class GameService {
             musicService.stopGameMusic(gameId);
             return false;
         }
-
-        creator.sendMessage(ChatColor.GREEN + "Game created! Waiting for more players...");
+        VirtualPlayerUtil.safeSendMessage(creator, ChatColor.GREEN + "Game created! Waiting for more players...");
         return true;
     }
 
@@ -70,12 +69,12 @@ public class GameService {
     public boolean joinGame(Player player, String gameId) {
         Game game = gameManager.getGame(gameId);
         if (game == null) {
-            player.sendMessage(ChatColor.RED + "Game not found");
+            VirtualPlayerUtil.safeSendMessage(player, ChatColor.RED + "Game not found");
             return false;
         }
 
         if (!game.addPlayer(player)) {
-            player.sendMessage(ChatColor.RED + "Cannot join game (possibly full)");
+            VirtualPlayerUtil.safeSendMessage(player, ChatColor.RED + "Cannot join game (possibly full)");
             return false;
         }
 
@@ -92,6 +91,36 @@ public class GameService {
     }
 
     /**
+     * Find and join an existing game for the given arena, or create a new one if
+     * none exists
+     */
+    public boolean joinOrCreateGame(Player player, String arenaId) {
+        // First, try to find an existing game for this arena
+        Game existingGame = findJoinableGame(arenaId);
+
+        if (existingGame != null) {
+            return joinGame(player, existingGame.getId());
+        } else {
+            // No joinable game found, create a new one
+            return createGame(player, arenaId);
+        }
+    }
+
+    /**
+     * Find a game that can be joined for the given arena
+     */
+    private Game findJoinableGame(String arenaId) {
+        for (Game game : gameManager.getActiveGames().values()) {
+            if (game.getArenaId().equals(arenaId) &&
+                    (game.getState() == GameState.WAITING || game.getState() == GameState.KIT_SELECTION) &&
+                    game.getPlayerCount() < 8) { // MAX_PLAYERS
+                return game;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Handle game flow when a player joins
      */
     private void handlePlayerJoinGameFlow(Game game, Player player) {
@@ -105,11 +134,12 @@ public class GameService {
             if (game.getPlayerCount() >= 2) {
                 startWaitingTimer(game);
             }
-        } else if (game.getState() == GameState.KIT_SELECTION) {
-            // Game is already in kit selection, teleport to spawn and give base kit
+        } else if (game.getState() == GameState.KIT_SELECTION) { // Game is already in kit selection, teleport to spawn
+                                                                 // and give base kit
             playerService.teleportToSpawn(player, game, arena);
             playerService.giveBaseKit(player, game.getPlayerTeam(player));
-            player.sendMessage(ChatColor.YELLOW + "Kit selection is in progress! Choose your kit!");
+            VirtualPlayerUtil.safeSendMessage(player,
+                    ChatColor.YELLOW + "Kit selection is in progress! Choose your kit!");
         }
         // Note: Players cannot join during IN_PROGRESS or ENDING states
     }
@@ -219,7 +249,7 @@ public class GameService {
 
     private void broadcastToGame(Game game, String message) {
         for (Player player : game.getPlayers()) {
-            player.sendMessage(message);
+            VirtualPlayerUtil.safeSendMessage(player, message);
         }
     }
 

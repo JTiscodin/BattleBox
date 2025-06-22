@@ -79,8 +79,8 @@ public class BattleBoxCommand implements CommandExecutor, TabCompleter {
         }
 
         String arenaName = args[1];
-        // For now, we create a new game if none exists
-        if (!gameService.createGame(player, arenaName)) {
+        // Try to join existing game first, create new one if none exists
+        if (!gameService.joinOrCreateGame(player, arenaName)) {
             player.sendMessage(ChatColor.RED + "Failed to join/create game for arena: " + arenaName);
         }
     }
