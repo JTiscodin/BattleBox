@@ -30,8 +30,19 @@ public class PlayerService {
      * Setup player when joining a game
      */
     public void setupPlayerForGame(Player player, Game game) {
-        Game.TeamColor team = game.getPlayerTeam(player);
-        VirtualPlayerUtil.safeSendMessage(player, team.chatColor + "You are on " + team.displayName + " team!");
+        // Clear player inventory when joining game
+        player.getInventory().clear();
+        player.getInventory().setArmorContents(null);
+
+        // Clear any active potion effects
+        player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
+
+        // Reset player health and hunger
+        player.setHealth(player.getMaxHealth());
+        player.setFoodLevel(20);
+        player.setSaturation(20.0f);
+
+        VirtualPlayerUtil.safeSendMessage(player, ChatColor.GRAY + "You will receive your kit when the game starts.");
     }
 
     /**
@@ -82,12 +93,10 @@ public class PlayerService {
         Game.TeamColor team = game.getPlayerTeam(player);
         ArenaConfig.Location teleport = team == Game.TeamColor.RED ? arena.teamSpawns.redTeleport
                 : arena.teamSpawns.blueTeleport;
-
         Location location = createBukkitLocation(arena.world, teleport);
         safeTeleport(player, location);
 
-        // Play music when entering battle
-        playBattleMusic(player, location);
+        // Music is now handled automatically by MusicService based on game state
     }
 
     /**
@@ -206,13 +215,5 @@ public class PlayerService {
         } else {
             player.getInventory().addItem(item);
         }
-    }
-
-    private void playBattleMusic(Player player, Location location) {
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (plugin instanceof plugins.battlebox.BattleBox battleBoxPlugin) {
-                battleBoxPlugin.playBattleMusic(player, location);
-            }
-        }, 20L);
     }
 }

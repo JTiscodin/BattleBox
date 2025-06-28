@@ -1,51 +1,49 @@
 package plugins.battlebox.core;
 
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
-
 import plugins.battlebox.game.Game;
 import plugins.battlebox.game.GameState;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
- * Service for managing music and sound effects during BattleBox games.
- * Handles background music, event sounds, and player-specific audio control.
+ * Ultra-simple music service - ALWAYS stop before playing new music
+ * No overlaps, no complex state, just works
  */
 public class MusicService {
 
     private final JavaPlugin plugin;
 
-    // Music state management
-    private final Map<String, BukkitTask> gameMusicTasks = new ConcurrentHashMap<>();
+    // Global state: what music is currently playing for each game
+    private final Map<String, GameMusicInfo> currentGameMusic = new ConcurrentHashMap<>();
     private final Map<UUID, MusicPreference> playerPreferences = new ConcurrentHashMap<>();
-    private final Map<String, GameMusicState> gameMusicStates = new ConcurrentHashMap<>();
-    // Music configuration
+
     private static final float DEFAULT_VOLUME = 0.5f;
     private static final float DEFAULT_PITCH = 1.0f;
 
     public MusicService(JavaPlugin plugin) {
         this.plugin = plugin;
+        plugin.getLogger().info("MusicService initialized - Ultra-simple mode");
     }
 
     /**
-     * Music events that can trigger different audio
+     * Music events
      */
     public enum MusicEvent {
-        GAME_WAITING("Waiting Room", Sound.MUSIC_DISC_WAIT, 220), // 11 seconds
-        GAME_KIT_SELECTION("Kit Selection", Sound.MUSIC_DISC_CAT, 185), // 9.25 seconds
-        GAME_STARTING("Game Starting", Sound.MUSIC_DISC_STAL, 150), // 7.5 seconds
-        GAME_IN_PROGRESS("Battle Music", Sound.MUSIC_DISC_PIGSTEP, 300), // 15 seconds
-        GAME_ENDING("Victory", Sound.MUSIC_DISC_OTHERSIDE, 195), // 9.75 seconds
+        // Background music (looped)
+        GAME_WAITING("Waiting Room", "battlebox.waiting", 2680),
+        GAME_BATTLE("Battle Music", "battlebox.music", 3600),
+        GAME_ENDING("Victory Music", "battlebox.walkoffame", 1540),
 
-        // Event sounds (not looped)
+        // Sound effects (one-time)
         PLAYER_JOIN("Player Join", Sound.ENTITY_PLAYER_LEVELUP, 0),
         PLAYER_LEAVE("Player Leave", Sound.BLOCK_IRON_DOOR_CLOSE, 0),
         WOOL_PLACED("Wool Placed", Sound.BLOCK_WOOL_PLACE, 0),
@@ -56,12 +54,27 @@ public class MusicService {
 
         public final String displayName;
         public final Sound sound;
-        public final int durationTicks; // 0 means one-time sound
+        public final String customSound;
+        public final int durationTicks;
 
+        // Constructor for Bukkit sounds
         MusicEvent(String displayName, Sound sound, int durationTicks) {
             this.displayName = displayName;
             this.sound = sound;
+            this.customSound = null;
             this.durationTicks = durationTicks;
+        }
+
+        // Constructor for custom sounds
+        MusicEvent(String displayName, String customSound, int durationTicks) {
+            this.displayName = displayName;
+            this.sound = null;
+            this.customSound = customSound;
+            this.durationTicks = durationTicks;
+        }
+
+        public boolean isCustomSound() {
+            return customSound != null;
         }
 
         public boolean isLooped() {
@@ -78,7 +91,6 @@ public class MusicService {
         private float musicVolume = DEFAULT_VOLUME;
         private float soundVolume = DEFAULT_VOLUME;
 
-        // Getters and setters
         public boolean isMusicEnabled() {
             return musicEnabled;
         }
@@ -113,64 +125,69 @@ public class MusicService {
     }
 
     /**
-     * Game music state tracking
+     * Game music info
      */
-    private static class GameMusicState {
-        private MusicEvent currentMusic;
+    private static class GameMusicInfo {
+        private final MusicEvent musicEvent;
+        private final BukkitTask loopTask;
 
-        public GameMusicState() {
-            this.currentMusic = MusicEvent.GAME_WAITING;
+        public GameMusicInfo(MusicEvent musicEvent, BukkitTask loopTask) {
+            this.musicEvent = musicEvent;
+            this.loopTask = loopTask;
+        }
+
+        public void stop() {
+            if (loopTask != null && !loopTask.isCancelled()) {
+                loopTask.cancel();
+            }
         }
     }
 
     // =================================================================
-    // PUBLIC API METHODS
+    // PUBLIC API METHODS - SIMPLE AND RELIABLE
     // =================================================================
 
     /**
-     * Start music for a specific game based on its state
+     * Start music for a game - ALWAYS stops previous music first
      */
     public void startGameMusic(Game game) {
-        String gameId = game.getId();
         MusicEvent musicEvent = getMusicEventForGameState(game.getState());
-
-        gameMusicStates.put(gameId, new GameMusicState());
-        playGameMusic(game, musicEvent);
-
-        plugin.getLogger().info("Started music for game " + gameId + " with event: " + musicEvent.displayName);
+        playMusicForGame(game, musicEvent);
     }
 
     /**
-     * Update music when game state changes
+     * Update music when game state changes - ALWAYS stops previous music first
      */
     public void updateGameMusic(Game game) {
-        MusicEvent newMusicEvent = getMusicEventForGameState(game.getState());
-        playGameMusic(game, newMusicEvent);
+        MusicEvent musicEvent = getMusicEventForGameState(game.getState());
+        playMusicForGame(game, musicEvent);
     }
 
     /**
-     * Stop all music for a game
+     * Stop all music for a game - GUARANTEED to stop everything
      */
     public void stopGameMusic(String gameId) {
-        BukkitTask task = gameMusicTasks.remove(gameId);
-        if (task != null && !task.isCancelled()) {
-            task.cancel();
+        GameMusicInfo info = currentGameMusic.remove(gameId);
+        if (info != null) {
+            info.stop();
+            plugin.getLogger().info("Stopped all music for game " + gameId);
         }
 
-        gameMusicStates.remove(gameId);
-        plugin.getLogger().info("Stopped music for game " + gameId);
+        // EXTRA SAFETY: Stop all sounds for all players in the game (if we can find
+        // them)
+        stopAllSoundsForGame(gameId);
     }
 
     /**
-     * Play a one-time sound effect for all players in a game
+     * Play a one-time sound effect
      */
     public void playGameSoundEffect(Game game, MusicEvent soundEvent) {
         if (soundEvent.isLooped()) {
-            plugin.getLogger().warning("Attempted to play looped music event as sound effect: " + soundEvent);
+            plugin.getLogger().warning("Cannot play looped music as sound effect: " + soundEvent.displayName);
             return;
         }
 
-        Set<Player> players = game.getRealPlayers(); // Use real players only
+        Set<Player> players = game.getRealPlayers();
         for (Player player : players) {
             if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
                 playSoundEffect(player, soundEvent);
@@ -179,210 +196,222 @@ public class MusicService {
     }
 
     /**
-     * Play a sound effect for a specific player
+     * Play sound effect for specific player
      */
     public void playSoundEffect(Player player, MusicEvent soundEvent) {
-        // Skip virtual players for sound operations
-        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player))
             return;
-        }
 
         MusicPreference pref = getPlayerPreference(player);
-
-        if (!pref.isSoundEffectsEnabled()) {
+        if (!pref.isSoundEffectsEnabled())
             return;
-        }
 
         try {
             player.playSound(player.getLocation(), soundEvent.sound,
-                    SoundCategory.MASTER, pref.getSoundVolume(), DEFAULT_PITCH);
+                    SoundCategory.NEUTRAL, pref.getSoundVolume(), DEFAULT_PITCH);
         } catch (Exception e) {
-            plugin.getLogger()
-                    .warning("Failed to play sound effect for player " + player.getName() + ": " + e.getMessage());
+            plugin.getLogger().warning("Failed to play sound effect for " + player.getName() + ": " + e.getMessage());
         }
     }
 
-    /**
-     * Handle player joining a game
-     */
+    // Event handlers
     public void onPlayerJoinGame(Player player, Game game) {
-        // Play join sound for other players
         playSoundEffect(player, MusicEvent.PLAYER_JOIN);
-
-        // Start appropriate music for the new player
-        GameMusicState musicState = gameMusicStates.get(game.getId());
-        if (musicState != null && musicState.currentMusic != null) {
-            playMusicForPlayer(player, musicState.currentMusic);
-        }
     }
 
-    /**
-     * Handle player leaving a game
-     */
     public void onPlayerLeaveGame(Player player, Game game) {
         playSoundEffect(player, MusicEvent.PLAYER_LEAVE);
-        stopMusicForPlayer(player);
     }
 
-    /**
-     * Handle countdown events
-     */
     public void onCountdownTick(Game game, int secondsLeft) {
         MusicEvent soundEvent = (secondsLeft <= 3) ? MusicEvent.COUNTDOWN_FINAL : MusicEvent.COUNTDOWN_TICK;
         playGameSoundEffect(game, soundEvent);
     }
 
-    /**
-     * Handle wool placement
-     */
     public void onWoolPlaced(Player player, Game game) {
         playSoundEffect(player, MusicEvent.WOOL_PLACED);
     }
 
-    /**
-     * Handle game end with winner
-     */
     public void onGameEnd(Game game, Game.TeamColor winner) {
         if (winner != null) {
             playGameSoundEffect(game, MusicEvent.TEAM_WIN);
         } else {
             playGameSoundEffect(game, MusicEvent.GAME_DRAW);
         }
-
-        // Stop the current music after a delay
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            playGameMusic(game, MusicEvent.GAME_ENDING);
-        }, 40L); // 2 seconds delay
     }
 
-    // =================================================================
-    // PLAYER PREFERENCE MANAGEMENT
-    // =================================================================
-
-    /**
-     * Get player's music preferences
-     */
+    // Player preferences
     public MusicPreference getPlayerPreference(Player player) {
         return playerPreferences.computeIfAbsent(player.getUniqueId(), k -> new MusicPreference());
     }
 
-    /**
-     * Update player's music preferences
-     */
     public void updatePlayerPreference(Player player, MusicPreference preference) {
         playerPreferences.put(player.getUniqueId(), preference);
     }
 
-    /**
-     * Toggle player's music on/off
-     */
     public boolean togglePlayerMusic(Player player) {
         MusicPreference pref = getPlayerPreference(player);
         pref.setMusicEnabled(!pref.isMusicEnabled());
-
-        if (!pref.isMusicEnabled()) {
-            stopMusicForPlayer(player);
-        }
-
         return pref.isMusicEnabled();
     }
 
-    /**
-     * Toggle player's sound effects on/off
-     */
     public boolean togglePlayerSoundEffects(Player player) {
         MusicPreference pref = getPlayerPreference(player);
         pref.setSoundEffectsEnabled(!pref.isSoundEffectsEnabled());
         return pref.isSoundEffectsEnabled();
-    } // =================================================================
-      // PRIVATE HELPER METHODS
-      // =================================================================
+    }
+
+    // =================================================================
+    // PRIVATE METHODS - THE CORE LOGIC
+    // =================================================================
 
     private MusicEvent getMusicEventForGameState(GameState state) {
         return switch (state) {
             case WAITING -> MusicEvent.GAME_WAITING;
-            case KIT_SELECTION -> MusicEvent.GAME_STARTING; // Use GAME_STARTING music for kit selection
-            case IN_PROGRESS -> MusicEvent.GAME_IN_PROGRESS;
+            case KIT_SELECTION, IN_PROGRESS -> MusicEvent.GAME_BATTLE;
             case ENDING -> MusicEvent.GAME_ENDING;
         };
     }
 
-    private void playGameMusic(Game game, MusicEvent musicEvent) {
+    /**
+     * THE CORE METHOD: Always stop, then play new music
+     * FIXED: No more overlapping - music only loops AFTER it finishes
+     */
+    private void playMusicForGame(Game game, MusicEvent musicEvent) {
         String gameId = game.getId();
-        GameMusicState musicState = gameMusicStates.get(gameId);
 
-        if (musicState == null) {
-            return;
-        }
+        plugin.getLogger().info("MUSIC CHANGE for game " + gameId + ": " + musicEvent.displayName);
 
-        // Stop current music if playing
-        BukkitTask currentTask = gameMusicTasks.get(gameId);
-        if (currentTask != null && !currentTask.isCancelled()) {
-            currentTask.cancel();
-        }
+        // STEP 1: ALWAYS STOP EVERYTHING FIRST
+        stopGameMusic(gameId);
 
-        musicState.currentMusic = musicEvent; // Start new music for all players in the game
-        Set<Player> players = game.getRealPlayers(); // Use real players only for network operations
+        // STEP 2: Aggressive stopping - stop all sounds for all players immediately
+        Set<Player> players = game.getRealPlayers();
         for (Player player : players) {
             if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
-                playMusicForPlayer(player, musicEvent);
-            }
-        } // If it's looped music, set up the repeating task
-        if (musicEvent.isLooped()) {
-            BukkitTask musicTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-                Set<Player> currentPlayers = game.getRealPlayers(); // Use real players only
-                for (Player player : currentPlayers) {
-                    if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
-                        playMusicForPlayer(player, musicEvent);
-                    }
+                try {
+                    player.stopAllSounds();
+                } catch (Exception e) {
+                    plugin.getLogger().warning("Failed to stop sounds for " + player.getName() + ": " + e.getMessage());
                 }
-            }, 0L, musicEvent.durationTicks);
-
-            gameMusicTasks.put(gameId, musicTask);
+            }
         }
+
+        // STEP 3: Wait for sounds to actually stop
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+
+            // STEP 4: Play new music for all players
+            Set<Player> currentPlayers = game.getRealPlayers();
+            plugin.getLogger().info("Playing " + musicEvent.displayName + " for " + currentPlayers.size() + " players");
+
+            for (Player player : currentPlayers) {
+                if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                    playMusicForPlayer(player, musicEvent);
+                }
+            }
+
+            // STEP 5: Set up looping ONLY if needed and AFTER track finishes
+            BukkitTask loopTask = null;
+            if (musicEvent.isLooped()) {
+                // FIXED: Wait for track to FINISH, then start looping
+                loopTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                    Set<Player> activePlayers = game.getRealPlayers();
+                    plugin.getLogger()
+                            .fine("Looping " + musicEvent.displayName + " for " + activePlayers.size() + " players");
+
+                    // Stop any residual sounds before playing again
+                    for (Player player : activePlayers) {
+                        if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                            try {
+                                player.stopAllSounds(); // Ensure clean slate
+                                playMusicForPlayer(player, musicEvent);
+                            } catch (Exception e) {
+                                plugin.getLogger().warning(
+                                        "Failed to loop music for " + player.getName() + ": " + e.getMessage());
+                            }
+                        }
+                    }
+                }, musicEvent.durationTicks + 10L, musicEvent.durationTicks + 10L); // +10 ticks buffer to ensure track
+                                                                                    // finishes
+            }
+
+            // STEP 6: Store the current music info
+            currentGameMusic.put(gameId, new GameMusicInfo(musicEvent, loopTask));
+
+        }, 10L); // Wait 10 ticks (0.5 seconds) for previous sounds to stop
     }
 
     private void playMusicForPlayer(Player player, MusicEvent musicEvent) {
-        // Skip virtual players for sound operations
-        if (!VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+        if (!VirtualPlayerUtil.canPerformNetworkOperations(player))
             return;
-        }
 
         MusicPreference pref = getPlayerPreference(player);
-
-        if (!pref.isMusicEnabled()) {
+        if (!pref.isMusicEnabled())
             return;
-        }
 
         try {
-            player.playSound(player.getLocation(), musicEvent.sound,
-                    SoundCategory.MUSIC, pref.getMusicVolume(), DEFAULT_PITCH);
+            if (musicEvent.isCustomSound()) {
+                // Use MUSIC category for better control over custom streaming music
+                player.playSound(player, musicEvent.customSound,
+                        SoundCategory.NEUTRAL, pref.getMusicVolume(), DEFAULT_PITCH);
+            } else {
+                player.playSound(player, musicEvent.sound,
+                        SoundCategory.NEUTRAL, pref.getMusicVolume(), DEFAULT_PITCH);
+            }
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to play sound for player " + player.getName() + ": " + e.getMessage());
+            plugin.getLogger().warning("Failed to play music for " + player.getName() + ": " + e.getMessage());
         }
     }
 
-    private void stopMusicForPlayer(Player player) {
-        // Note: Minecraft doesn't have a direct way to stop sounds for a specific
-        // player
-        // This is a limitation of the Bukkit API
-        // You could implement a workaround using resource packs or client-side mods
-        plugin.getLogger().fine("Stopped music for player " + player.getName());
+    /**
+     * Extra safety method - try to stop all sounds for players
+     */
+    private void stopAllSoundsForGame(String gameId) {
+        // Find the game and stop all sounds for its players
+        try {
+            // We need to access the game manager to get the game
+            if (plugin instanceof plugins.battlebox.BattleBox) {
+                plugins.battlebox.BattleBox battleBoxPlugin = (plugins.battlebox.BattleBox) plugin;
+                plugins.battlebox.game.Game game = battleBoxPlugin.getGameManager().getGame(gameId);
+
+                if (game != null) {
+                    Set<Player> players = game.getRealPlayers();
+                    plugin.getLogger()
+                            .info("Force-stopping all sounds for " + players.size() + " players in game " + gameId);
+
+                    for (Player player : players) {
+                        if (VirtualPlayerUtil.canPerformNetworkOperations(player)) {
+                            try {
+                                // Stop ALL sounds for this player
+                                player.stopAllSounds();
+                                plugin.getLogger().fine("Stopped all sounds for player: " + player.getName());
+                            } catch (Exception e) {
+                                plugin.getLogger().warning(
+                                        "Failed to stop sounds for " + player.getName() + ": " + e.getMessage());
+                            }
+                        }
+                    }
+                } else {
+                    plugin.getLogger().fine("Could not find game " + gameId + " to stop sounds");
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error stopping sounds for game " + gameId + ": " + e.getMessage());
+        }
     }
 
     /**
      * Cleanup when plugin disables
      */
     public void shutdown() {
-        // Cancel all music tasks
-        for (BukkitTask task : gameMusicTasks.values()) {
-            if (task != null && !task.isCancelled()) {
-                task.cancel();
-            }
+        plugin.getLogger().info("Shutting down MusicService...");
+
+        // Stop all music
+        for (GameMusicInfo info : currentGameMusic.values()) {
+            info.stop();
         }
 
-        gameMusicTasks.clear();
-        gameMusicStates.clear();
+        currentGameMusic.clear();
         playerPreferences.clear();
 
         plugin.getLogger().info("MusicService shutdown complete");

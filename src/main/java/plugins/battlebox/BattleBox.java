@@ -5,7 +5,6 @@ import java.io.FileInputStream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.SoundCategory;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -45,8 +44,6 @@ import plugins.battlebox.managers.TimerManager;
 
 public final class BattleBox extends JavaPlugin {
 
-    private static final String BATTLEBOX_MUSIC_SOUND = "battlebox.music";
-
     private GameService gameService;
     private PlayerService playerService;
     private KitService kitService;
@@ -76,7 +73,7 @@ public final class BattleBox extends JavaPlugin {
         timerManager = new TimerManager(this);
         scoreboardManager = new ScoreboardManager(this, gameManager);
         arenaCreationManager = new ArenaCreationManager(this, arenaManager);
-        gameService = new GameService(gameManager, arenaManager, timerManager, playerService, musicService);
+        gameService = new GameService(gameManager, arenaManager, timerManager, playerService, musicService, this);
 
         // Link managers
         timerManager.setScoreboardManager(scoreboardManager);
@@ -107,7 +104,8 @@ public final class BattleBox extends JavaPlugin {
 
     private void registerListeners(GameManager gameManager, ArenaManager arenaManager) {
         var pm = getServer().getPluginManager();
-        pm.registerEvents(new BlockPlaceListener(gameManager, arenaManager, timerManager), this);
+        pm.registerEvents(new BlockPlaceListener(gameManager, gameService, musicService, arenaManager, timerManager),
+                this);
         pm.registerEvents(new BlockBreakListener(gameManager, arenaManager), this);
         pm.registerEvents(new PlayerInteractListener(gameManager, kitService, arenaManager), this);
         pm.registerEvents(new PlayerConnectionListener(scoreboardManager), this);
@@ -150,15 +148,6 @@ public final class BattleBox extends JavaPlugin {
 
     public MusicService getMusicService() {
         return musicService;
-    }
-
-    /**
-     * Play battle music when player enters combat area
-     */
-    public void playBattleMusic(Player player, Location location) {
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            player.playSound(location, BATTLEBOX_MUSIC_SOUND, SoundCategory.MUSIC, 1.0f, 1.0f);
-        }, 20L);
     }
 
     @Override
